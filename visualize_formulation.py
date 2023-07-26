@@ -1,0 +1,165 @@
+"""visualize_formulation.py
+Creates figures of molecular weight and radius against temperature from an input file
+
+Input file has columns, 
+    "Well",
+    "DLS Temp (C)",
+    "MW-S (Da)",
+    "Radius (nm)",
+    "Range1 Radius (I) (0.1-10nm)",
+    "Sample",
+    "Concentration (mg/mL)",  # Used for labeling
+"""
+import logging
+import logging.config
+import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
+
+
+WELLS_WITH_DATA = [
+    ["C1", "C3"],
+    ["D1", "D3"],
+    ["E1", "E3"],
+    ["F1", "F3"],
+]
+# WELL_TO_FORM is used to map the well ID to the formulation if the "formulation" column is not
+# available in CSV
+WELL_TO_FORM = {
+    "C1": "Acetate pH 5.0",
+    "C3": "Histidine pH 7.0",
+    "D1": "Citrate pH 6.2",
+    "D3": "Histidine pH 5.5",
+    "E1": "Acetate pH 4.5",
+    "E3": "Histidine pH 6.2",
+    "F1": "Histidine pH 5.5",
+    "F3": "Acetate pH 5.0",
+}
+FILE_PATH = ""
+PATH_SAVE = "" # path to which to save figs
+# RENAME_COLS should not be changed
+RENAME_COLS = {
+    "mw_s (da)": "metric_value-mw_s (da)",
+    "radius (nm)": "metric_value-radius (nm)"
+}
+logging.basicConfig(filename="visualize_formulation.log", level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+def prepare_data(file_path=FILE_PATH):
+    """Reformats the dataframe for 
+
+    Parameters
+    ----------
+    file_path : str, optional
+        Path of the file location, by default FILE_PATH
+
+    Returns
+    -------
+    pd.DataFrame
+        Dataframe with columns "well", "dls temp (c)", "formulation", "metric_name",
+        and "metric_value"
+    """
+    df_data = pd.read_csv(file_path)
+    # make all columns lowercase
+    df_data.columns = df_data.columns.str.lower().str.replace("-", "_")
+    # rename cols
+    df_data = df_data.rename(columns=RENAME_COLS)
+    df_data = pd.wide_to_long(
+        df_data,
+        stubnames="metric_value",
+        i=["well", "dls temp (c)"],
+        j="metric_name",
+        sep="-",
+        suffix=r"\D+",
+    ).reset_index()
+    if "formulation" not in df_data:
+        logger.info("Mapping well to formulation with %s", WELL_TO_FORM)
+        df_data= df_data.assign(formulation=lambda x: x.well.map(WELL_TO_FORM))
+    return df_data
+
+
+def config_legend_contents(ax, ax2):
+    """Helper function to combine legend labels from two axes
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        Axes for left-hand-side
+    ax2 : matplotlib.axes.Axes
+        Second axes for right-hand-side
+
+    Returns
+    -------
+    tuple[list, list]
+        [0] Contains matplotlib matplotlib.lines.Line2D objects
+        [1] Contains list of str labels
+    """
+    handles, labels = ax.get_legend_handles_labels()
+    second_handles, second_labels = ax2.get_legend_handles_labels()
+    new_handles = [h for h in handles]
+    new_labels = [l for l in labels]
+    new_handles.append(second_handles[-1])
+    new_labels.append(second_labels[-1])
+    return new_handles, new_labels
+
+
+def fig_rad_mw_temp(df_wells, path_save=PATH_SAVE):
+    """Generate a figure of radius and molecular weight against temperature
+
+    Parameters
+    ----------
+    df_wells : pd.DataFrame
+        Contains "dls temp (c)", "formulation", "metric_name", and "metric_value" columns 
+    path_save : str, optional
+        Path to which to save figures, by default PATH_SAVE
+
+    Returns
+    -------
+    tuple[matplotlib.axes.Axes]
+        Objects pointing to figure
+    """
+    fig, ax = plt.subplots(1, 1, dpi=150)
+    sns.lineplot(
+        data=df_wells.query("metric_name == 'mw_s (da)'"),
+        x="dls temp (c)",
+        y="metric_value",
+        hue="formulation",
+        style="metric_name",
+        markers=True,
+        markersize=12,
+        mec="k",
+        ax=ax,
+    ).set_ylabel("MW-S (Da)")
+    ax2 = plt.twinx()
+    sns.lineplot(
+        data=df_wells.query("metric_name == 'radius (nm)'"),
+        x="dls temp (c)",
+        y="metric_value",
+        hue="formulation",
+        style="metric_name",
+        ax=ax2, 
+        markers=["^"],
+        markersize=12,
+        mec="k",
+        legend="brief",
+    ).set_ylabel("Radius (nm)")
+    ax.set_xlabel("Temperature ($\degree$C)")
+    ax.legend(*config_legend_contents(ax, ax2))
+    ax2.get_legend().remove()
+    plt.show()
+    return fig, ax, ax2
+
+
+def make_figs():
+    logger.info("Preparing data...")
+    df_data = prepare_data()
+    for wells in WELLS_WITH_DATA:
+        df_wells = df_data.query("well in @wells")
+        fig_rad_mw_temp(df_wells)
+        logger.info("Successfuly made figure for wells %s", wells)
+
+
+def test_figs():
+    df_wells = prepare_data("dummy_protein.csv")
+    return fig_rad_mw_temp(df_wells)
