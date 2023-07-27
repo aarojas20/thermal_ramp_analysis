@@ -225,3 +225,7 @@ def make_figs():
 def test_figs():
     df_wells = prepare_data("dummy_protein.csv")
     return fig_rad_mw_temp(df_wells)
+
+
+if __name__ == "__main__":
+    make_figs()
