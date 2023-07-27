@@ -214,6 +214,8 @@ def fig_rad_mw_temp(df_wells, path_save=PATH_SAVE):
 
 
 def make_figs():
+    """Make figures for WELLS_WITH_DATA
+    """
     logger.info("Preparing data...")
     df_data = prepare_data()
     for wells in WELLS_WITH_DATA:
